@@ -7,6 +7,8 @@ package edu.fscj.cop3330c.printsim;
 
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 class IdleState implements PrinterState {
     @Override
@@ -50,11 +52,13 @@ public class Printer {
     private Queue<PrintJob> printQueue;
     private static int jobCounter = 0;
     private PrinterState state;
+    private final Lock lock;
 
-    public Printer() {
-        printQueue = new LinkedList<>();
-        state = new IdleState(); // Start in IdleState
-    }
+public Printer() {
+    printQueue = new LinkedList<>();
+    state = new IdleState(); //start in IdleState
+    lock = new ReentrantLock();
+}
 
     public void setState(PrinterState state) {
         this.state = state;
@@ -65,56 +69,88 @@ public class Printer {
     }
 
     public boolean hasPendingJobs() {
-        return !printQueue.isEmpty();
+        lock.lock();
+
+        try {
+            return !printQueue.isEmpty();
+        } finally {
+            lock.unlock();
+        }
+    }
+    public PrintJob pollJob() {
+        lock.lock();
+        try {
+            return printQueue.poll();
+    } finally {
+        lock.unlock();
     }
 
-    public PrintJob pollJob() {
-         return printQueue.poll();
     }
 
     public void addDocument(String document) {
-        PrintJob job = new PrintJob(document, ++jobCounter);
-        printQueue.offer(job);
-        System.out.println("Document added to the queue: " +
-                document + " (Job #" + job.getJobNumber() + ")");
+        lock.lock();
+
+        try {
+            PrintJob job = new PrintJob(document, ++jobCounter);
+            printQueue.offer(job);
+
+            System.out.println("Document added to the queue: "
+            + document + " (Job #" + job.getJobNumber() + ")");
+        } finally {
+            lock.unlock();
+        }
     }
 
     public void print(PrintJob job) {
-        System.out.println("Printing Job #" + job.getJobNumber() +
-                ": " + job.getDocumentName());
+        lock.lock();
         try {
-            Thread.sleep(1000); // Simulate time taken to print
+            System.out.println("Printing Job #" + job.getJobNumber()
+            + "; " + job.getDocumentName());
+
+            Thread.sleep(1000);
+            System.out.println("Printing complete for Job #"
+            + job.getJobNumber());
         } catch (InterruptedException e) {
-            System.out.println("Printing was interrupted.");
+            System.out.println("Printing was interrupted");
+        } finally {
+            lock.unlock();
         }
-        System.out.println("Printing completed for Job #" +
-                job.getJobNumber());
     }
 
     public void processQueue() {
-        state.processQueue(this);
+        lock.lock();
+
+        try {
+            state.processQueue(this);
+        } finally {
+            lock.unlock();
+        }
     }
 
     public static void main(String[] args) {
-        final int MAX_IDLE = 5; // seconds
-
+        final int MAX_IDLE = 5;
         Printer printer = new Printer();
         DocumentRepository documentRepository = new DocumentRepository();
 
-        // Create and start a worker thread
-        PrinterWorker worker = new PrinterWorker(printer,
-                documentRepository, MAX_IDLE);
+        PrinterWorker worker1 =
+                new PrinterWorker(printer, documentRepository, MAX_IDLE);
+        PrinterWorker worker2 =
+                new PrinterWorker(printer, documentRepository, MAX_IDLE);
+        PrinterWorker worker3 =
+                new PrinterWorker(printer, documentRepository, MAX_IDLE);
+        Thread thread1 = new Thread(worker1);
+        Thread thread2 = new Thread(worker2);
+        Thread thread3 = new Thread(worker3);
 
-        Thread workerThread = new Thread(worker);
-
-        workerThread.start();
-
+        thread1.start();
+        thread2.start();
+        thread3.start();
         try {
-            // Wait for all worker threads to finish and record the time
-            workerThread.join();
+            thread1.join();
+            thread2.join();
+            thread3.join();
         } catch (InterruptedException e) {
-            System.out.println(
-                    "Main thread interrupted while waiting for worker threads.");
+            System.out.println("Main thread interrupted while waiting for worker threads. ");
         }
     }
 }

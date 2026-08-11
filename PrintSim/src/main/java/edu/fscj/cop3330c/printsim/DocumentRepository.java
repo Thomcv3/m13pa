@@ -7,14 +7,19 @@ package edu.fscj.cop3330c.printsim;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 public class DocumentRepository {
     private List<String> documentList;
     private int documentIndex;
+    private final Lock lock;
 
     public DocumentRepository() {
         this.documentList = new ArrayList<>();
         this.documentIndex = 0;
+        this.lock = new ReentrantLock();
         initializeDocuments();
     }
 
@@ -27,17 +32,26 @@ public class DocumentRepository {
     }
 
     // Get the next document
-    public String getNextDocument() {
-        String nextDocument = null;
+   public String getNextDocument() {
+        lock.lock();
         try {
-            nextDocument = documentList.get(documentIndex++);
+            if (documentIndex < documentList.size()) {
+                return documentList.get(documentIndex++);
+            }
+            return null;
         } finally {
-            return nextDocument;
+            lock.unlock();
         }
-    }
+   }
 
     // Check if there are more documents
     public boolean hasMoreDocuments() {
-         return documentIndex < documentList.size();
+        lock.lock();
+        try {
+            return documentIndex < documentList.size();
+        } finally {
+            lock.unlock();
+        }
+
     }
 }
